@@ -7,7 +7,6 @@ venv/
 .docker/
 
 *.csv
-*.json
 data.csv
 !morocco_cities.json  # Keep the input file, ignore the output
 
