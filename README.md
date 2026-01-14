@@ -12,5 +12,5 @@ The data is saved to `data.csv` with the following columns: `City`, `Name`, `Cat
 1. Open this folder in your terminal.
 2. Run the following command:
    ```bash
-   docker-compose up --build
+   docker compose up --build
    ```
