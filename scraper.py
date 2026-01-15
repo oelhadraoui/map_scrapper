@@ -12,7 +12,7 @@ OUTPUT_FILE = "data.csv"
 KEYWORDS = ["Cafe", "Restaurant", "Snack", "Tea House", "Pizzeria", "Fast Food"]
 
 CONCURRENT_TABS = 6
-STEP_SIZE = 0.025          # ~2.5km grid (Fast coverage).
+STEP_SIZE = 0.015          # ~2.5km grid (Fast coverage).
 ZOOM_LEVEL = 16
 TIMEOUT_SEC = 20000       # 20s timeout
 
