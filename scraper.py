@@ -2,19 +2,31 @@ import asyncio
 import os
 import json
 import re
+import math
+import urllib.parse
 import pandas as pd
 from playwright.async_api import async_playwright
 import nest_asyncio
 
 INPUT_JSON = "morocco_cities.json"
-OUTPUT_FILE = "data.csv"
+OUTPUT_FILE = "morocco_banks.csv"
 
-KEYWORDS = ["Cafe", "Restaurant", "Snack", "Tea House", "Pizzeria", "Fast Food"]
+# 🔍 KEYWORDS optimized for Moroccan Banks
+KEYWORDS = [
+    "Banque", "Bank", "Attijariwafa", "Banque Populaire", 
+    "Bank of Africa", "BMCE", "BMCI", "CIH", 
+    "Crédit Agricole", "Crédit du Maroc", "Société Générale", 
+    "Al Barid", "CFG Bank"
+]
 
-CONCURRENT_TABS = 6
-STEP_SIZE = 0.015          # ~2.5km grid (Fast coverage).
-ZOOM_LEVEL = 16
-TIMEOUT_SEC = 20000       # 20s timeout
+CONCURRENT_TABS = 5
+STEP_SIZE = 0.025          # ~2.5km grid
+ZOOM_LEVEL = 15
+TIMEOUT_SEC = 15000       
+
+# ==========================================
+# 🛠️ HELPER FUNCTIONS
+# ==========================================
 
 def load_cities():
     if not os.path.exists(INPUT_JSON):
@@ -29,7 +41,6 @@ def generate_grid(city_data):
     pop = float(city_data.get('population', 50000))
     
     radius_km = min(15, max(4, int(pop / 100000)))
-    
     lat_range = radius_km / 111
     lng_range = radius_km / 90
     
@@ -47,49 +58,65 @@ def generate_grid(city_data):
         curr_lat += STEP_SIZE
     return points
 
-def clean_rating(details_text):
+def calculate_distance(lat1, lon1, lat2, lon2):
     """
-    🧹 ROBUST RATING CLEANER
-    Extracts ONLY numbers 0.0 to 5.0. Returns 'Unknown' if failed.
+    🌐 GEOFENCE MATH: Calculates distance in km between two GPS points.
+    Prevents Google from injecting Khouribga results into Casablanca.
     """
-    if not details_text: return "Unknown"
+    R = 6371  # Earth radius in km
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = math.sin(dlat/2) * math.sin(dlat/2) + math.cos(math.radians(lat1)) \
+        * math.cos(math.radians(lat2)) * math.sin(dlon/2) * math.sin(dlon/2)
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+    return R * c
 
-    match = re.search(r'(?:^|\s)([0-5][.,]\d)(?:\s|$|·|\()', details_text)
+# ==========================================
+# 🤖 CORE SCRAPER
+# ==========================================
+
+async def get_place_details(context, url):
+    page = await context.new_page()
+    address = "Unknown"
     
-    if match:
-        val = match.group(1).replace(',', '.')
-        try:
-            float_val = float(val)
-            if 0 <= float_val <= 5:
-                return str(float_val)
-        except:
-            pass
+    try:
+        nav_url = url + "?hl=en" if "?" not in url else url + "&hl=en"
+        await page.goto(nav_url, timeout=10000)
+        
+        address_locator = page.locator('button[data-item-id="address"]')
+        await address_locator.wait_for(state="visible", timeout=4000)
+        
+        if await address_locator.count() > 0:
+            raw_address = await address_locator.first.inner_text()
             
-    return "Unknown"
-
-def parse_place_data(raw_text, raw_link):
-    """
-    Parses Name and Rating. Handles UTF-8 (Arabic/French) correctly.
-    """
-    lines = raw_text.split('\n')
-    if not lines: return None, None, None
-
-    name = lines[0].strip()
-    
-    # Combine the rest of the lines to search for rating
-    details = " ".join(lines[1:])
-    
-    rating = clean_rating(details)
-    clean_link = raw_link.split('?')[0] if raw_link else ""
-
-    return name, rating, clean_link
+            # Clean up newlines and strip hidden Google map-pin icons
+            cleaned = re.sub(r'[\ue000-\uf8ff]', '', raw_address).replace('\n', ', ').strip()
+            
+            # Remove "Address:" prefixes and leading commas
+            if cleaned.lower().startswith("address:"):
+                cleaned = cleaned[8:].strip()
+            if cleaned.lower().startswith("adresse:"):
+                cleaned = cleaned[8:].strip()
+            
+            cleaned = cleaned.lstrip(', ') # Fixes the ", 103 Bd Mohammed VI" issue
+                
+            if cleaned and re.search(r'[a-zA-Z0-9]', cleaned):
+                address = cleaned
+                
+    except Exception:
+        pass 
+    finally:
+        await page.close()
+        
+    return address
 
 async def scrape_sector(context, lat, lng, keyword):
     page = await context.new_page()
     results = []
     
-    # URL (Forced English interface ensures the code structure is consistent)
-    url = f"https://www.google.com/maps/search/{keyword}/@{lat},{lng},{ZOOM_LEVEL}z?hl=en"
+    # URL encoded safely to prevent broken links
+    safe_keyword = urllib.parse.quote(keyword)
+    url = f"https://www.google.com/maps/search/{safe_keyword}/@{lat},{lng},{ZOOM_LEVEL}z?hl=en"
     
     try:
         await page.goto(url, timeout=TIMEOUT_SEC)
@@ -99,7 +126,6 @@ async def scrape_sector(context, lat, lng, keyword):
         except:
             return []
 
-        # Scroll logic
         feed = page.locator('div[role="feed"]')
         if await feed.count() > 0:
             for _ in range(3):
@@ -109,12 +135,10 @@ async def scrape_sector(context, lat, lng, keyword):
                 if await page.locator("text=You've reached the end").is_visible():
                     break
         
-        # JS Extraction
         elements = await page.evaluate('''() => {
             const items = document.querySelectorAll('div[role="article"]');
             return Array.from(items).map(item => {
                 const linkEl = item.querySelector('a');
-                // We capture aria-label too because it often has cleaner text
                 return { 
                     text: item.innerText, 
                     aria: linkEl ? linkEl.getAttribute('aria-label') : "",
@@ -126,26 +150,37 @@ async def scrape_sector(context, lat, lng, keyword):
         for el in elements:
             if not el['href']: continue
             
-            # Use Python parser
-            name, rate, link = parse_place_data(el['text'], el['href'])
-
-            if (not name or name == "") and el['aria']:
+            name = ""
+            if el['aria']:
                 try:
-                    name = el['aria'].split(" · ")[0].split(" 4.")[0]
+                    name = el['aria'].split(" · ")[0].split(" 4.")[0].split(" 3.")[0].split(" 5.")[0]
                 except:
                     name = el['aria']
+            
+            if not name:
+                name = el['text'].split('\n')[0]
+                
+            name = re.sub(r'[\ue000-\uf8ff]', '', name).strip()
 
             coords = re.search(r'!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)', el['href'])
-            final_lat = coords.group(1) if coords else str(lat)
-            final_lng = coords.group(2) if coords else str(lng)
+            if coords:
+                final_lat = float(coords.group(1))
+                final_lng = float(coords.group(2))
+                
+                # 🛑 THE GEOFENCE CHECK
+                # If Google suggests a bank more than 6km away from our search grid, REJECT IT.
+                dist = calculate_distance(lat, lng, final_lat, final_lng)
+                if dist > 6.0:
+                    continue  # Skip this bank entirely
+            else:
+                final_lat = lat
+                final_lng = lng
             
             results.append({
                 "Name": name,
-                "Category": keyword,
-                "Rating": rate,
-                "Latitude": final_lat,
-                "Longitude": final_lng,
-                "Link": link
+                "Latitude": str(final_lat),
+                "Longitude": str(final_lng),
+                "Link": el['href'].split('?')[0]
             })
     except:
         pass 
@@ -155,7 +190,6 @@ async def scrape_sector(context, lat, lng, keyword):
     return results
 
 async def worker(queue, browser, seen_links, stats, total_tasks):
-    # Resource Blocker
     async def block_resources(route):
         if route.request.resource_type in ["image", "media", "font", "stylesheet"]:
             await route.abort()
@@ -169,38 +203,49 @@ async def worker(queue, browser, seen_links, stats, total_tasks):
         lat, lng, city, keyword = task
         current_idx = total_tasks - queue.qsize()
 
-        context = await browser.new_context(locale="en-US")
+        # 🛑 GPS SPOOFING
+        # We tell the browser that it is physically standing at the lat/lng coordinates.
+        context = await browser.new_context(
+            locale="en-US",
+            geolocation={"longitude": float(lng), "latitude": float(lat)},
+            permissions=["geolocation"]
+        )
         await context.route("**/*", block_resources)
         
-        print(f"   ⚙️  [Sector {current_idx}/{total_tasks}] {city} ({keyword})...", end='\r')
+        print(f"   ⚙️  [Sector {current_idx}/{total_tasks}] {city} ({keyword}) Scanning...", end='\r')
         
         try:
-            data = await scrape_sector(context, lat, lng, keyword)
+            discovered_banks = await scrape_sector(context, lat, lng, keyword)
             
             new_rows = []
-            for row in data:
-                if row['Link'] not in seen_links:
-                    seen_links.add(row['Link'])
+            for item in discovered_banks:
+                link = item['Link']
+                
+                if link and link not in seen_links:
+                    seen_links.add(link)
+                    
+                    print(f"   🔎 [Sector {current_idx}/{total_tasks}] Extracting address for: {item['Name'][:20]}...", end='\r')
+                    address = await get_place_details(context, link)
+                    
                     new_rows.append({
+                        "Name": item['Name'],
                         "City": city,
-                        "Name": row['Name'],
-                        "Category": row['Category'],
-                        "Rating": row['Rating'],
-                        "Latitude": row['Latitude'],
-                        "Longitude": row['Longitude'],
-                        "Link": row['Link']
+                        "Address": address,
+                        "Latitude": item['Latitude'],
+                        "Longitude": item['Longitude'],
+                        "Link": link
                     })
             
             if new_rows:
                 df = pd.DataFrame(new_rows)
-                cols = ["City", "Name", "Category", "Rating", "Latitude", "Longitude", "Link"]
+                cols = ["Name", "City", "Address", "Latitude", "Longitude", "Link"]
                 df = df[cols]
                 
                 header = not os.path.isfile(OUTPUT_FILE)
                 df.to_csv(OUTPUT_FILE, mode='a', header=header, index=False, encoding='utf-8-sig')
                 
                 stats['count'] += len(new_rows)
-                print(f"   ✅ [Sector {current_idx}/{total_tasks}] {city}: Found +{len(new_rows)} {keyword}s (Total: {stats['count']})")
+                print(f"   ✅ [Sector {current_idx}/{total_tasks}] {city}: Found +{len(new_rows)} NEW Banks (Total: {stats['count']})")
         
         except Exception:
             pass
@@ -221,13 +266,11 @@ async def main():
         except: pass
 
     async with async_playwright() as p:
-        
         for city_data in cities:
             city_name = city_data['city']
             print(f"\n🌍 STARTING CITY: {city_name} ==================")
 
             browser = await p.chromium.launch(headless=True)
-            
             queue = asyncio.Queue()
             grid = generate_grid(city_data)
             

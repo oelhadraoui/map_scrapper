@@ -1,12 +1,23 @@
 [
   {
+    "city": "Casablanca", 
+    "lat": "33.5333", 
+    "lng": "-7.5833", 
+    "country": "Morocco", 
+    "iso2": "MA", 
+    "admin_name": "Casablanca-Settat", 
+    "capital": "admin", 
+    "population": "3499000", 
+    "population_proper": "3499000"
+  }, 
+  {
     "city": "Fès", 
     "lat": "34.0433", 
     "lng": "-5.0033", 
     "country": "Morocco", 
     "iso2": "MA", 
     "admin_name": "Fès-Meknès", 
-    "capital": "admin", 
+    "capital": "admin",
     "population": "1112072", 
     "population_proper": "1112072"
   }, 
