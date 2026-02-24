@@ -9,17 +9,25 @@ from playwright.async_api import async_playwright
 import nest_asyncio
 
 INPUT_JSON = "morocco_cities.json"
-OUTPUT_FILE = "morocco_banks.csv"
+OUTPUT_FILE = "morocco_banks_atms.csv"
 
-# 🔍 KEYWORDS optimized for Moroccan Banks
+# 🔍 KEYWORDS : Noms exacts des banques de détail + GAB
 KEYWORDS = [
-    "Banque", "Bank", "Attijariwafa", "Banque Populaire", 
-    "Bank of Africa", "BMCE", "BMCI", "CIH", 
-    "Crédit Agricole", "Crédit du Maroc", "Société Générale", 
-    "Al Barid", "CFG Bank"
+    "Attijariwafa Bank", "Banque Populaire", "Bank of Africa", 
+    "BMCI", "Crédit Agricole du Maroc", "Crédit du Maroc", "CIH Bank", 
+    "Société Générale Maroc", "Al Barid Bank", "CFG Bank", 
+    "Bank Assafa", "Umnia Bank", "Bank Al Yousr", "Al Akhdar Bank", "Bank Al Karam",
+    "Guichet automatique", "ATM"
 ]
 
-CONCURRENT_TABS = 5
+# 🛑 FILTRE ANTI-SPAM : Exclut les agences de transfert et comptables
+EXCLUDED_TERMS = [
+    "cash plus", "wafacash", "western union", "moneygram", 
+    "dirham express", "transfert", "comptable", "assurance", 
+    "change", "ria", "canal m"
+]
+
+CONCURRENT_TABS = 6
 STEP_SIZE = 0.025          # ~2.5km grid
 ZOOM_LEVEL = 15
 TIMEOUT_SEC = 15000       
@@ -60,8 +68,7 @@ def generate_grid(city_data):
 
 def calculate_distance(lat1, lon1, lat2, lon2):
     """
-    🌐 GEOFENCE MATH: Calculates distance in km between two GPS points.
-    Prevents Google from injecting Khouribga results into Casablanca.
+    🌐 GEOFENCE MATH: Empêche Google d'injecter des résultats hors de la zone de recherche.
     """
     R = 6371  # Earth radius in km
     dlat = math.radians(lat2 - lat1)
@@ -89,16 +96,14 @@ async def get_place_details(context, url):
         if await address_locator.count() > 0:
             raw_address = await address_locator.first.inner_text()
             
-            # Clean up newlines and strip hidden Google map-pin icons
             cleaned = re.sub(r'[\ue000-\uf8ff]', '', raw_address).replace('\n', ', ').strip()
             
-            # Remove "Address:" prefixes and leading commas
             if cleaned.lower().startswith("address:"):
                 cleaned = cleaned[8:].strip()
             if cleaned.lower().startswith("adresse:"):
                 cleaned = cleaned[8:].strip()
             
-            cleaned = cleaned.lstrip(', ') # Fixes the ", 103 Bd Mohammed VI" issue
+            cleaned = cleaned.lstrip(', ')
                 
             if cleaned and re.search(r'[a-zA-Z0-9]', cleaned):
                 address = cleaned
@@ -114,7 +119,6 @@ async def scrape_sector(context, lat, lng, keyword):
     page = await context.new_page()
     results = []
     
-    # URL encoded safely to prevent broken links
     safe_keyword = urllib.parse.quote(keyword)
     url = f"https://www.google.com/maps/search/{safe_keyword}/@{lat},{lng},{ZOOM_LEVEL}z?hl=en"
     
@@ -162,16 +166,20 @@ async def scrape_sector(context, lat, lng, keyword):
                 
             name = re.sub(r'[\ue000-\uf8ff]', '', name).strip()
 
+            # 🛑 ANTI-SPAM FILTER : Ignorer les agences non bancaires
+            name_lower = name.lower()
+            if any(term in name_lower for term in EXCLUDED_TERMS):
+                continue
+
             coords = re.search(r'!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)', el['href'])
             if coords:
                 final_lat = float(coords.group(1))
                 final_lng = float(coords.group(2))
                 
-                # 🛑 THE GEOFENCE CHECK
-                # If Google suggests a bank more than 6km away from our search grid, REJECT IT.
+                # 🛑 GEOFENCE CHECK (Max 6km)
                 dist = calculate_distance(lat, lng, final_lat, final_lng)
                 if dist > 6.0:
-                    continue  # Skip this bank entirely
+                    continue
             else:
                 final_lat = lat
                 final_lng = lng
@@ -204,7 +212,6 @@ async def worker(queue, browser, seen_links, stats, total_tasks):
         current_idx = total_tasks - queue.qsize()
 
         # 🛑 GPS SPOOFING
-        # We tell the browser that it is physically standing at the lat/lng coordinates.
         context = await browser.new_context(
             locale="en-US",
             geolocation={"longitude": float(lng), "latitude": float(lat)},
