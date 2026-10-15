@@ -5,6 +5,4 @@ services:
     volumes:
       - .:/app
     shm_size: '2gb'
-    environment:
-      - PYTHONUNBUFFERED=1  
     restart: "no"

@@ -1,0 +1,114 @@
+[
+  {
+    "company": "Marjane Holding",
+    "brand": "Marjane Market",
+    "query": "Marjane Market supermarket",
+    "aliases": ["Marjane Market", "Acima"],
+    "dense": false
+  },
+  {
+    "company": "Marjane Holding",
+    "brand": "Marjane City",
+    "query": "Marjane City supermarket",
+    "aliases": ["Marjane City"],
+    "dense": true
+  },
+  {
+    "company": "Marjane Holding",
+    "brand": "Marjane",
+    "query": "Marjane hypermarket",
+    "aliases": ["Marjane"],
+    "dense": false
+  },
+  {
+    "company": "Groupe LabelVie / Retail Holding",
+    "brand": "Carrefour Market",
+    "query": "Carrefour Market supermarket",
+    "aliases": ["Carrefour Market"],
+    "dense": false
+  },
+  {
+    "company": "Groupe LabelVie / Retail Holding",
+    "brand": "Carrefour Express",
+    "query": "Carrefour Express supermarket",
+    "aliases": ["Carrefour Express"],
+    "dense": true
+  },
+  {
+    "company": "Groupe LabelVie / Retail Holding",
+    "brand": "Carrefour Gourmet",
+    "query": "Carrefour Gourmet supermarket",
+    "aliases": ["Carrefour Gourmet", "Carrefour Market Gourmet"],
+    "dense": false
+  },
+  {
+    "company": "Groupe LabelVie / Retail Holding",
+    "brand": "Carrefour",
+    "query": "Carrefour hypermarket",
+    "aliases": ["Carrefour"],
+    "dense": false
+  },
+  {
+    "company": "Groupe LabelVie / Retail Holding",
+    "brand": "Atacadao",
+    "query": "Atacadao cash and carry",
+    "aliases": ["Atacadao", "Atacadão"],
+    "dense": false
+  },
+  {
+    "company": "Groupe LabelVie / Retail Holding",
+    "brand": "Supeco",
+    "query": "Supeco supermarket",
+    "aliases": ["Supeco", "Sup Eco"],
+    "dense": true
+  },
+  {
+    "company": "BIM Maroc",
+    "brand": "BIM",
+    "query": "BIM supermarket",
+    "aliases": ["BIM", "BIM Maroc"],
+    "dense": true
+  },
+  {
+    "company": "Ynna Holding",
+    "brand": "Aswak Assalam",
+    "query": "Aswak Assalam hypermarket",
+    "aliases": ["Aswak Assalam", "Aswak Salam", "Asswak Assalam"],
+    "dense": false
+  },
+  {
+    "company": "Africa Retail Market",
+    "brand": "Hyper U",
+    "query": "Hyper U supermarket",
+    "aliases": ["Hyper U"],
+    "dense": false
+  },
+  {
+    "company": "Africa Retail Market",
+    "brand": "U Express",
+    "query": "U Express supermarket",
+    "aliases": ["U Express"],
+    "dense": false
+  },
+  {
+    "company": "Kazyon Morocco",
+    "brand": "Kazyon",
+    "query": "Kazyon Market",
+    "aliases": ["Kazyon", "Kazyon Market"],
+    "dense": true
+  },
+  {
+    "company": "H&S Invest Holding / One Retail",
+    "brand": "Franprix",
+    "query": "Franprix supermarket",
+    "aliases": ["Franprix"],
+    "dense": false
+  },
+  {
+    "company": "H&S Invest Holding / One Retail",
+    "brand": "Monoprix",
+    "query": "Monoprix supermarket",
+    "aliases": ["Monoprix"],
+    "dense": false
+  }
+]
